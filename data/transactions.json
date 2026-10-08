@@ -1,0 +1,95 @@
+﻿[
+  {
+    "transaction_id": "TXN1001",
+    "customer_id": "CUST501",
+    "amount": 85000,
+    "currency": "INR",
+    "location": "Bengaluru",
+    "transaction_time": "2026-10-08T02:13:00",
+    "transaction_type": "CARD_PAYMENT",
+    "merchant_category": "Electronics",
+    "usual_transaction_amount": 4500,
+    "usual_location": "Mysuru",
+    "anomaly": true,
+    "anomaly_codes": [
+      "HIGH_AMOUNT",
+      "UNUSUAL_LOCATION",
+      "UNUSUAL_TIME"
+    ],
+    "risk_score": 0.91,
+    "rule_rationale": "Transaction amount is significantly above the customer's normal range and occurred at an unusual location and time."
+  },
+  {
+    "transaction_id": "TXN1002",
+    "customer_id": "CUST502",
+    "amount": 1200,
+    "currency": "INR",
+    "location": "Mysuru",
+    "transaction_time": "2026-10-08T14:20:00",
+    "transaction_type": "CARD_PAYMENT",
+    "merchant_category": "Grocery",
+    "usual_transaction_amount": 2500,
+    "usual_location": "Mysuru",
+    "anomaly": false,
+    "anomaly_codes": [],
+    "risk_score": 0.08,
+    "rule_rationale": "Transaction is within the customer's normal amount, location, and time patterns."
+  },
+  {
+    "transaction_id": "TXN1003",
+    "customer_id": "CUST503",
+    "amount": 45000,
+    "currency": "INR",
+    "location": "Mumbai",
+    "transaction_time": "2026-10-08T11:35:00",
+    "transaction_type": "ONLINE_PAYMENT",
+    "merchant_category": "Travel",
+    "usual_transaction_amount": 5000,
+    "usual_location": "Bengaluru",
+    "anomaly": true,
+    "anomaly_codes": [
+      "HIGH_AMOUNT",
+      "UNUSUAL_LOCATION"
+    ],
+    "risk_score": 0.86,
+    "rule_rationale": "Transaction amount is much higher than the customer's usual spending and the location is unusual."
+  },
+  {
+    "transaction_id": "TXN1004",
+    "customer_id": "CUST504",
+    "amount": 3200,
+    "currency": "INR",
+    "location": "Bengaluru",
+    "transaction_time": "2026-10-08T23:58:00",
+    "transaction_type": "CARD_PAYMENT",
+    "merchant_category": "Food",
+    "usual_transaction_amount": 2800,
+    "usual_location": "Bengaluru",
+    "anomaly": true,
+    "anomaly_codes": [
+      "UNUSUAL_TIME"
+    ],
+    "risk_score": 0.63,
+    "rule_rationale": "Transaction occurred at an unusual late-night time for this customer."
+  },
+  {
+    "transaction_id": "TXN1005",
+    "customer_id": "CUST505",
+    "amount": 18000,
+    "currency": "INR",
+    "location": "Hyderabad",
+    "transaction_time": "2026-10-08T16:10:00",
+    "transaction_type": "CARD_PAYMENT",
+    "merchant_category": "Jewellery",
+    "usual_transaction_amount": 3000,
+    "usual_location": "Bengaluru",
+    "anomaly": true,
+    "anomaly_codes": [
+      "HIGH_AMOUNT",
+      "UNUSUAL_LOCATION",
+      "UNUSUAL_MERCHANT_CATEGORY"
+    ],
+    "risk_score": 0.89,
+    "rule_rationale": "Transaction has an unusually high amount, unfamiliar location, and unusual merchant category."
+  }
+]
