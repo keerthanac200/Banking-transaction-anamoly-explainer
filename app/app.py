@@ -29,19 +29,21 @@ class Transaction(BaseModel):
 def extract_ai_fields(ai_text):
     explanation = ai_text
     recommended_action = ""
+    risk_level = "UNKNOWN"
 
     if "Suggested Action:" in ai_text:
         parts = ai_text.split("Suggested Action:", 1)
         explanation = parts[0].replace("Explanation:", "").strip()
-
         action_part = parts[1]
 
         if "Risk Level:" in action_part:
-            recommended_action = action_part.split("Risk Level:", 1)[0].strip()
+            action_parts = action_part.split("Risk Level:", 1)
+            recommended_action = action_parts[0].strip()
+            risk_level = action_parts[1].strip().splitlines()[0].strip()
         else:
             recommended_action = action_part.strip()
 
-    return explanation, recommended_action
+    return explanation, recommended_action, risk_level
 
 
 @app.get("/")
@@ -55,26 +57,25 @@ def home():
 @app.post("/analyze")
 def analyze(transaction: Transaction):
     transaction_data = transaction.model_dump()
-
     analysis = analyze_transaction(transaction_data)
 
-    ai_text = generate_explanation(
-        transaction_data,
-        analysis
-    )
+    ai_text = generate_explanation(transaction_data, analysis)
 
-    explanation, recommended_action = extract_ai_fields(ai_text)
+    explanation, recommended_action, risk_level = extract_ai_fields(ai_text)
 
     return {
         "transaction_id": transaction_data["transaction_id"],
         "customer_id": transaction_data["customer_id"],
         "amount": transaction_data["amount"],
+        "currency": transaction_data["currency"],
         "location": transaction_data["location"],
         "usual_location": transaction_data["usual_location"],
         "transaction_time": transaction_data["transaction_time"],
         "transaction_type": transaction_data["transaction_type"],
         "merchant_category": transaction_data["merchant_category"],
+        "is_anomaly": analysis["is_anomaly"],
         "risk_score": analysis["risk_score"],
+        "risk_level": risk_level,
         "anomaly_codes": analysis["anomaly_codes"],
         "explanation": explanation,
         "recommended_action": recommended_action

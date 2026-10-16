@@ -1,65 +1,21 @@
-﻿import json
-<<<<<<< HEAD
-import requests
+﻿import requests
+import re
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "gemma3:4b"
+OLLAMA_TIMEOUT = 180
 
 
 def generate_explanation(transaction, analysis):
-    amount = transaction.get("amount", 0)
-    currency = transaction.get("currency", "INR")
-    usual_amount = transaction.get("usual_transaction_amount", 0)
-    location = transaction.get("location", "Unknown")
-    usual_location = transaction.get("usual_location", "Unknown")
-    transaction_time = transaction.get("transaction_time", "Unknown")
-    transaction_id = transaction.get("transaction_id", "Unknown")
+    """Generate a complete, concise explanation with a reliable fallback."""
 
     anomaly_codes = analysis.get("anomaly_codes", [])
-    risk_score = float(analysis.get("risk_score", 0))
+    risk_score = analysis.get("risk_score", 0)
 
-    reasons = []
-
-    if "HIGH_AMOUNT" in anomaly_codes:
-        reasons.append(
-            f"the transaction amount was {currency} {amount:,.2f}, "
-            f"higher than the usual amount of {currency} {usual_amount:,.2f}"
-        )
-
-    if "UNUSUAL_LOCATION" in anomaly_codes:
-        reasons.append(
-            f"the transaction occurred in {location}, "
-            f"instead of the usual location {usual_location}"
-        )
-
-    if "UNUSUAL_TIME" in anomaly_codes:
-        reasons.append(f"the transaction occurred at {transaction_time}")
-
-    if "UNUSUAL_MERCHANT_CATEGORY" in anomaly_codes:
-        reasons.append(
-            f"the merchant category was "
-            f"{transaction.get('merchant_category', 'Unknown')}"
-        )
-
-    if reasons:
-        fallback_explanation = (
-            f"Transaction {transaction_id} was flagged because "
-            + "; ".join(reasons)
-            + ". These indicators require review but do not confirm fraud."
-        )
-    else:
-        fallback_explanation = (
-            f"Transaction {transaction_id} did not trigger the configured "
-            "anomaly detection rules."
-        )
-
-    if analysis.get("is_anomaly"):
-        fallback_action = (
-            "Review recent account activity and verify the transaction "
-            "with the customer before taking further action."
-        )
-    else:
-        fallback_action = "Continue routine transaction monitoring."
+    try:
+        risk_score = float(risk_score)
+    except (TypeError, ValueError):
+        risk_score = 0.0
 
     if risk_score >= 0.70:
         risk_level = "HIGH"
@@ -68,138 +24,173 @@ def generate_explanation(transaction, analysis):
     else:
         risk_level = "LOW"
 
+    amount = transaction.get("amount", "unknown")
+    usual_amount = transaction.get("usual_transaction_amount", "unknown")
+    location = transaction.get("location", "unknown")
+    usual_location = transaction.get("usual_location", "unknown")
+
+    # Build an evidence-based explanation without relying on the LLM.
+    reasons = []
+
+    if "HIGH_AMOUNT" in anomaly_codes:
+        reasons.append(
+            f"The transaction amount ({amount}) is higher than "
+            f"the customer's usual transaction amount ({usual_amount})."
+        )
+
+    if "UNUSUAL_LOCATION" in anomaly_codes:
+        reasons.append(
+            f"The transaction location ({location}) differs from "
+            f"the customer's usual location ({usual_location})."
+        )
+
+    if "UNUSUAL_TIME" in anomaly_codes:
+        reasons.append(
+            "The transaction occurred at an unusual time."
+        )
+
+    if "UNUSUAL_MERCHANT_CATEGORY" in anomaly_codes:
+        reasons.append(
+            "The merchant category triggered an anomaly indicator."
+        )
+
+    if not reasons:
+        reasons.append(
+            "The transaction was flagged by the anomaly detection system."
+        )
+
+    fallback_explanation = " ".join(reasons)
+
+    if risk_level in ("HIGH", "MEDIUM"):
+        fallback_action = (
+            "Review the transaction details and verify the activity "
+            "with the customer before taking further action."
+        )
+    else:
+        fallback_action = (
+            "Continue routine monitoring and follow standard "
+            "banking review procedures."
+        )
+
+    fallback = (
+        f"Explanation: {fallback_explanation}\n\n"
+        f"Suggested Action: {fallback_action}\n\n"
+        f"Risk Level: {risk_level}"
+    )
+
     prompt = f"""
-You are a banking transaction anomaly explanation assistant.
+You are BankGuard AI, a banking transaction explanation assistant.
 
-STRICT RULES:
-1. Use ONLY the information provided in the input JSON.
-2. Never invent facts, customer history, transaction details, or risk scores.
-3. Do NOT calculate, estimate, or mention any numeric risk score in the explanation.
-4. The rule engine has already calculated the risk level.
-5. Use the exact risk level provided below. Do not change it.
-6. Explain only the anomaly indicators listed in the analysis JSON.
-7. An anomaly does not prove fraud.
-8. Keep the explanation clear, concise, and professional.
-9. Recommend verification and review when an anomaly is detected.
-10. Do not claim that a transaction is fraudulent without evidence.
+Use ONLY the facts supplied below. Never invent information.
+An anomaly is a reason to review a transaction, not proof of fraud.
 
-Input JSON:
-{json.dumps({"transaction": transaction, "analysis": analysis}, indent=2)}
+Transaction amount: {amount}
+Customer's usual transaction amount: {usual_amount}
+Transaction location: {location}
+Customer's usual location: {usual_location}
+Anomaly indicators: {", ".join(anomaly_codes) if anomaly_codes else "None"}
+Calculated risk score: {risk_score}
+Calculated risk level: {risk_level}
 
-Authoritative risk level calculated by the rule engine: {risk_level}
-
-Return exactly these three sections:
+Write a complete response using EXACTLY these three headings:
 
 Explanation:
-Explain the detected anomaly indicators using only the supplied data.
-Do not include a numeric risk score.
+Write 2 or 3 complete sentences explaining the supplied indicators.
 
 Suggested Action:
-Recommend an appropriate next step based on the detected indicators.
+Write 1 or 2 complete sentences describing a sensible review action.
 
 Risk Level:
-Write exactly: {risk_level}
+Write exactly {risk_level}.
+
+Requirements:
+- Use clear, professional banking language.
+- Complete every sentence.
+- Do not repeat the same point.
+- Do not claim fraud is confirmed.
+- Do not change the calculated risk level.
+- Keep the complete response under 120 words.
+- Do not end in the middle of a sentence.
 """
+
     try:
         response = requests.post(
             OLLAMA_URL,
             json={
                 "model": OLLAMA_MODEL,
                 "prompt": prompt,
-                "stream": False
+                "stream": False,
+                "options": {
+                    "num_predict": 180,
+                    "temperature": 0.1,
+                },
             },
-            timeout=120
+            timeout=OLLAMA_TIMEOUT,
         )
+
         response.raise_for_status()
 
-        generated_text = response.json().get("response", "").strip()
+        explanation = response.json().get("response", "").strip()
 
-        if generated_text and "Explanation:" in generated_text:
-            print("[LLM] Explanation generated by Gemma 3 via Ollama.")
-            return generated_text
+        # Remove any accidental surrounding Markdown fences.
+        explanation = re.sub(
+            r"^\s*```(?:text|markdown)?\s*|\s*```\s*$",
+            "",
+            explanation,
+            flags=re.IGNORECASE,
+        ).strip()
 
-        print("[LLM] Unexpected model response; using fallback.")
+        # Validate that all required sections are present.
+        has_explanation = re.search(
+            r"(?im)^\s*Explanation\s*:",
+            explanation,
+        )
+        has_action = re.search(
+            r"(?im)^\s*Suggested Action\s*:",
+            explanation,
+        )
+        has_risk = re.search(
+            r"(?im)^\s*Risk Level\s*:",
+            explanation,
+        )
+
+        # Reject incomplete responses rather than showing broken output.
+        if has_explanation and has_action and has_risk:
+            risk_match = re.search(
+                r"(?im)^\s*Risk Level\s*:\s*(HIGH|MEDIUM|LOW)\b",
+                explanation,
+            )
+
+            if risk_match:
+                # Keep the risk level consistent with the rule engine.
+                explanation = re.sub(
+                    r"(?im)^(\s*Risk Level\s*:\s*)(HIGH|MEDIUM|LOW)\b.*$",
+                    lambda match: match.group(1) + risk_level,
+                    explanation,
+                )
+
+                print("[LLM] Complete explanation generated.")
+                return explanation
+
+        print("[LLM] Response incomplete. Using rule-based fallback.")
+
+    except requests.Timeout:
+        print(
+            f"[LLM] Ollama exceeded {OLLAMA_TIMEOUT} seconds. "
+            "Using rule-based fallback."
+        )
 
     except requests.RequestException as error:
-        print(f"[LLM] Ollama unavailable: {error}")
+        print(f"[LLM] Ollama request failed: {error}. Using fallback.")
 
-    print("[LLM] Using rule-based fallback explanation.")
+    except (ValueError, KeyError) as error:
+        print(f"[LLM] Invalid Ollama response: {error}. Using fallback.")
 
-    return (
-        f"Explanation:\n{fallback_explanation}\n\n"
-        f"Suggested Action:\n{fallback_action}\n\n"
-        f"Risk Level:\n{risk_level}"
-    )
+    return fallback
 
 
 if __name__ == "__main__":
-    with open("data/transactions.json", "r", encoding="utf-8-sig") as file:
-        transactions = json.load(file)
-
-    from app.anomaly_engine import analyze_transaction
-
-    if transactions:
-        transaction = transactions[0]
-        analysis = analyze_transaction(transaction)
-
-        print("\n===== ANOMALY DETECTION RESULT =====\n")
-        print(json.dumps(analysis, indent=2))
-
-        print("\n===== GEMMA 3 EXPLANATION =====\n")
-        print(generate_explanation(transaction, analysis))
-    else:
-        print("No transactions found in data/transactions.json.")
-=======
-import subprocess
-
-
-def generate_explanation(transaction, analysis):
-    prompt = f"""
-You are a banking transaction anomaly explanation assistant.
-
-Explain the transaction ONLY using the information provided below.
-Do not invent facts.
-
-Transaction:
-{json.dumps(transaction, indent=2)}
-
-Detected anomaly:
-{json.dumps(analysis, indent=2)}
-
-Return exactly this format:
-
-Explanation:
-<2-3 sentence explanation of why the transaction was flagged>
-
-Suggested Action:
-<one practical action for a bank analyst>
-
-Risk Level:
-<LOW, MEDIUM, or HIGH>
-"""
-
-    result = subprocess.run(
-        ["ollama", "run", "gemma3:4b", prompt],
-        capture_output=True,
-        text=True,
-        encoding="utf-8"
-    )
-
-    if result.returncode != 0:
-        return f"Ollama error: {result.stderr}"
-
-    return result.stdout.strip()
-
-
-if __name__ == "__main__":
-    with open("data/transactions.json", "r", encoding="utf-8-sig") as f:
-        transactions = json.load(f)
-
-    from anomaly_engine import analyze_transaction
-
-    transaction = transactions[0]
-    analysis = analyze_transaction(transaction)
-
-    print("\n===== AI EXPLANATION =====\n")
-    print(generate_explanation(transaction, analysis))
->>>>>>> ac004ab1b4cec80ee258c29dfba665938008568b
+    print("BankGuard AI LLM explainer loaded.")
+    print(f"Model: {OLLAMA_MODEL}")
+    print(f"Ollama URL: {OLLAMA_URL}")
+    print(f"Timeout: {OLLAMA_TIMEOUT} seconds")
